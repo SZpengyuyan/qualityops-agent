@@ -45,7 +45,11 @@ def resolve(spec: dict, value: dict) -> dict:
         target = pointer(spec, reference)
         if not isinstance(target, dict):
             raise ImportError("引用目标必须是对象。")
-        value = {**target, **{key: item for key, item in value.items() if key != "$ref"}}
+        # OAS 3.0 ignores Reference Object siblings. OAS 3.1 permits only
+        # summary/description overrides here (Schema Objects stay symbolic).
+        siblings = {key: item for key, item in value.items()
+                    if key in {"summary", "description"} and spec["openapi"].startswith("3.1.")}
+        value = {**target, **siblings}
     return value
 
 
@@ -139,6 +143,9 @@ def parse_openapi(content: str) -> tuple[dict, list[dict]]:
             })
             if len(operations) > MAX_OPERATIONS:
                 raise ImportError("当前每份文档最多支持 500 个接口。")
-    if len(json.dumps(operations, ensure_ascii=False).encode("utf-8")) > 4 * MAX_BYTES:
-        raise ImportError("解析结果过大，请拆分文档后重试。")
+    encoded_size = 0
+    for chunk in json.JSONEncoder(ensure_ascii=False).iterencode(operations):
+        encoded_size += len(chunk.encode("utf-8"))
+        if encoded_size > 4 * MAX_BYTES:
+            raise ImportError("解析结果过大，请拆分文档后重试。")
     return spec, operations

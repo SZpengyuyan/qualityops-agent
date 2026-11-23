@@ -91,7 +91,7 @@ export function OpenAPIManager({ projectId, onBusyChange }: { projectId: string;
     <section aria-labelledby={`openapi-${projectId}`} className="mt-6 border-t border-indigo-100 pt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h4 id={`openapi-${projectId}`} className="font-semibold">接口文档与目录</h4><p className="mt-1 text-xs text-slate-500">OpenAPI 3.0/3.1 · JSON · 最多 1 MiB / 500 个接口</p></div>
-        <div className="flex gap-2"><button className={button} disabled={busy || loading} onClick={() => setRevision(value => value + 1)}>刷新目录</button><button className={button} disabled={busy || loading || !!loadError} onClick={() => { setShowImport(value => !value); setReplace(false); setActionError('') }}>{showImport ? '收起导入' : document ? '重新导入文档' : '导入 OpenAPI'}</button></div>
+        <div className="flex gap-2"><button className={button} disabled={busy || loading} onClick={() => { setOperationId(null); setRevision(value => value + 1) }}>刷新目录</button><button className={button} disabled={busy || loading || !!loadError} onClick={() => { setShowImport(value => !value); setReplace(false); setActionError('') }}>{showImport ? '收起导入' : document ? '重新导入文档' : '导入 OpenAPI'}</button></div>
       </div>
       {notice && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</p>}
       {loadError && <p role="alert" className="mt-4 text-sm text-rose-700">目录加载失败：{loadError}</p>}

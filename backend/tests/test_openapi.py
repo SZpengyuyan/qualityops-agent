@@ -156,3 +156,28 @@ def test_not_found_and_pagination(client, spec):
 def test_invalid_numeric_and_unicode_values_are_rejected(content):
     with pytest.raises(ImportError):
         parse_openapi(content)
+
+
+def test_oas30_reference_siblings_cannot_override_required(spec):
+    reference = spec['paths']['/orders/{order_id}']['parameters'][0]
+    reference['required'] = False
+    reference['description'] = 'ignored sibling'
+    _, operations = parse_openapi(json.dumps(spec))
+    parameter = operations[-1]['parameters'][0]
+    assert parameter['required'] is True
+    assert 'description' not in parameter
+
+
+def test_oas31_reference_description_override(spec):
+    spec['openapi'] = '3.1.0'
+    spec['paths']['/orders/{order_id}']['parameters'][0]['description'] = 'override description'
+    _, operations = parse_openapi(json.dumps(spec))
+    assert operations[-1]['parameters'][0]['description'] == 'override description'
+    assert operations[-1]['parameters'][0]['required'] is True
+
+
+def test_snapshot_size_is_bounded(spec):
+    spec['components']['responses'] = {'Large': {'description': 'x' * 15000}}
+    spec['paths'] = {f'/item{i}': {'get': {'responses': {'200': {'$ref': '#/components/responses/Large'}}}} for i in range(350)}
+    with pytest.raises(ImportError, match='解析结果过大'):
+        parse_openapi(json.dumps(spec))
