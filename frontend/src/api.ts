@@ -11,7 +11,11 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
   })
   if (!response.ok) {
-    if (response.status === 422) throw new Error('输入格式不正确，请检查项目名称和 HTTP/HTTPS 地址。')
+    if (response.status === 422) {
+      const body: unknown = await response.json().catch(() => null)
+      if (typeof body === 'object' && body !== null && 'detail' in body && typeof body.detail === 'string') throw new Error(body.detail)
+      throw new Error('输入格式不正确，请检查字段内容、长度和格式。')
+    }
     if (response.status === 404) throw new Error('项目不存在，可能已被删除。请刷新列表。')
     throw new Error(`请求失败（HTTP ${response.status}），请稍后重试。`)
   }

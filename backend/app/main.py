@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base, build_engine, configured_database_url, create_session_factory, get_session
 from app.routers.projects import router as projects_router
+from app.routers.openapi import router as openapi_router
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.include_router(projects_router)
+    app.include_router(openapi_router)
 
     @app.get("/")
     def root():

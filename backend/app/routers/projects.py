@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_session
-from app.models import Project
+from app.models import OpenAPIDocument, Project
 from app.schemas import ProjectInput, ProjectList, ProjectRead
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -60,6 +60,10 @@ def update_project(project_id: UUID, payload: ProjectInput, session: DatabaseSes
 @router.delete("/{project_id}", status_code=204)
 def delete_project(project_id: UUID, session: DatabaseSession):
     project = find_project(project_id, session)
+    document = session.get(OpenAPIDocument, str(project_id))
+    if document:
+        session.delete(document)
+        session.flush()
     session.delete(project)
     session.commit()
     return Response(status_code=204)

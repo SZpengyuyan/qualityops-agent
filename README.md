@@ -1,8 +1,8 @@
 # QualityOps Agent
 
-基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **Day 1 工程基础设施 + Day 2 项目管理**：可运行的 React Dashboard、FastAPI 健康检查、SQLite 持久化与项目 CRUD。
+基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **工程基础设施、项目管理、OpenAPI 文档导入与接口目录**：可运行的 React Dashboard、FastAPI、SQLite 持久化与规范校验。
 
-OpenAPI 解析、RAG、测试生成、工具执行、Agent Trace 与 Benchmark 尚未实现；页面不展示模拟的业务统计。
+RAG、测试生成、工具执行、Agent Trace 与 Benchmark 尚未实现；页面不展示模拟的业务统计。
 
 ## 技术栈与目录
 
@@ -10,6 +10,7 @@ OpenAPI 解析、RAG、测试生成、工具执行、Agent Trace 与 Benchmark �
 - 后端：Python 3.11、FastAPI、SQLAlchemy 2.0、SQLite、HTTPX、pytest、python-dotenv。
 - `frontend/`：Dashboard、Vite `/api` 代理、生产 Nginx 代理。
 - `backend/app/`：应用工厂、数据库配置、项目模型与 Schema、独立项目路由；`backend/tests/`：隔离数据库测试。
+- `backend/app/services/openapi.py`：离线解析与规范校验；`backend/app/routers/openapi.py`：文档和接口目录 API。
 - `demo-api/`、`benchmark/`：后续阶段占位。
 - `scripts/`：Windows 启动脚本；`docs/`：阶段验证记录。
 
@@ -47,7 +48,7 @@ npm install --prefix .tools --no-audit --no-fund --registry=https://registry.npm
 
 访问 [Dashboard](http://127.0.0.1:5173) 和 [API 文档](http://127.0.0.1:8000/docs)。关闭服务使用对应终端的 Ctrl+C。
 
-如需自定义数据库，将 `backend/.env.example` 复制为 `backend/.env`。默认数据库为 `backend/data/qualityops.db`，相对路径始终以 `backend/` 为基准。启动时通过 SQLAlchemy `create_all` 创建缺失的 `projects` 表，不删除已有数据。当前尚无版本化数据库迁移；后续修改已有表结构前需引入迁移方案。
+如需自定义数据库，将 `backend/.env.example` 复制为 `backend/.env`。默认数据库为 `backend/data/qualityops.db`，相对路径始终以 `backend/` 为基准。启动时通过 SQLAlchemy `create_all` 创建缺失的 `projects` 和 `openapi_documents` 表，不删除已有数据。当前尚无版本化数据库迁移；后续修改已有表结构前需引入迁移方案。
 
 ## 项目管理
 
@@ -61,7 +62,27 @@ npm install --prefix .tools --no-audit --no-fund --registry=https://registry.npm
 
 名称去除首尾空白后需为 1–100 字，描述最多 2000 字。基础地址不接受凭据、查询参数和片段；无效输入返回 422。ID 使用 UUID，时间为 UTC。项目名称允许重复。前端每页显示 6 条，并提供加载、失败、保存和删除确认反馈。
 
-当前是本地单用户 MVP，未实现登录、权限或多用户隔离。验收记录：[Day 1](docs/day-1.md)、[Day 2](docs/day-2.md)。
+当前是本地单用户 MVP，未实现登录、权限或多用户隔离。验收记录：[Day 1](docs/day-1.md)、[Day 2](docs/day-2.md)、[Day 3](docs/day-3.md)。
+
+## OpenAPI 文档导入与接口目录
+
+在项目详情中点击“导入 OpenAPI”，选择本地 JSON 文件或粘贴内容，再点击“校验并导入”。可使用仓库自带的 [订单示例文档](docs/examples/orders.openapi.json)，它包含 3 个接口，仅作为解析示例，不代表待测服务已经启动。
+
+导入后可按 HTTP 方法、标签筛选，按路径/摘要/operationId 搜索，分页查看接口；点击接口查看合并后的参数、请求体、响应、认证和服务地址定义。Schema 内的 `$ref` 保留为符号引用，不展开递归 Schema。
+
+- 支持 OpenAPI **3.0.x / 3.1.x JSON**；不支持 YAML、Swagger 2、OpenAPI 3.2、URL 抓取或外部引用。
+- 每份文档最多 **1 MiB、500 个接口**，嵌套不超过 48 层，结构节点不超过 50000；解析快照最多 4 MiB。
+- 仅支持文档内 `#/` JSON Pointer 引用；拒绝自定义 `$id`、`$schema`、动态引用和 `jsonSchemaDialect`。这些限制也适用于扩展及示例对象中的同名键。
+- 规范校验由 `openapi-spec-validator` 完成；操作级参数按 `(name, in)` 覆盖路径级同名参数，认证和服务器配置按层级继承。
+- 每个项目保存一份最新文档及目录。重新导入需勾选替换确认；先完整解析，再事务提交，解析失败保留原目录。当前没有文档版本历史或多标签页的并发编辑冲突检测。
+- 删除项目会清理对应文档。文档导入不会执行任何待测 API。
+
+接口（均位于 `/api/projects/{project_id}`）：
+
+- `PUT /openapi`：请求体 `{"content":"JSON 文档文本"}`，校验并整体替换，返回文档摘要。
+- `GET /openapi`：文档摘要；尚未导入返回 `null`。
+- `GET /operations?method=GET&tag=Orders&q=order&limit=20&offset=0`：接口分页列表。
+- `GET /operations/{operation_id}`：接口详情。目录 ID 根据方法与路径生成，文档中的原始 operationId 单独保留。
 
 ## 健康检查与验收
 
@@ -94,7 +115,7 @@ docker compose up --build
 
 ## GitHub 与密钥
 
-Public 仓库：[SZpengyuyan/qualityops-agent](https://github.com/SZpengyuyan/qualityops-agent)。Day 1 分支为 `codex/day-1-infrastructure`，Day 2 分支为 `codex/day-2-project-management`。已完成设备认证并配置 `origin`；后续推送前可检查：
+Public 仓库：[SZpengyuyan/qualityops-agent](https://github.com/SZpengyuyan/qualityops-agent)。阶段分支为 `codex/day-1-infrastructure`、`codex/day-2-project-management`、`codex/day-3-openapi-import`。已完成设备认证并配置 `origin`；后续推送前可检查：
 
 ```powershell
 gh auth status

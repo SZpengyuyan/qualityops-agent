@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import String, Text
+from sqlalchemy import ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -20,3 +20,15 @@ class Project(Base):
     base_url: Mapped[str] = mapped_column(String(2048))
     created_at: Mapped[str] = mapped_column(String(40), default=utc_now)
     updated_at: Mapped[str] = mapped_column(String(40), default=utc_now, onupdate=utc_now)
+
+
+class OpenAPIDocument(Base):
+    __tablename__ = "openapi_documents"
+
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    title: Mapped[str] = mapped_column(Text)
+    api_version: Mapped[str] = mapped_column(Text)
+    openapi_version: Mapped[str] = mapped_column(String(20))
+    imported_at: Mapped[str] = mapped_column(String(40), default=utc_now)
+    spec: Mapped[dict] = mapped_column(JSON)
+    operations: Mapped[list] = mapped_column(JSON)

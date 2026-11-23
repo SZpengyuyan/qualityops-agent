@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { errorMessage, request } from './api'
 import type { Project, ProjectInput, ProjectPage } from './api'
+import { OpenAPIManager } from './OpenAPIManager'
 
 const emptyProject: ProjectInput = { name: '', description: '', base_url: '' }
 const button = 'rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:cursor-wait disabled:opacity-50'
@@ -106,6 +107,7 @@ export function ProjectManager() {
         <p className="mt-4 break-all text-xs text-slate-400">ID: {selected.id} · 创建于 {new Date(selected.created_at).toLocaleString('zh-CN')}</p>
         <div className="mt-4 flex flex-wrap gap-2"><button disabled={busy} className={button} onClick={() => { setDraft({ name: selected.name, description: selected.description, base_url: selected.base_url }); setEditingId(selected.id); setConfirmDelete(false); setActionError('') }}>编辑项目</button><button disabled={busy} className={`${button} text-rose-700`} onClick={() => setConfirmDelete(true)}>删除项目</button><button disabled={busy} className={button} onClick={clearPanel}>关闭详情</button></div>
         {confirmDelete && <div className="mt-4 rounded-lg border border-rose-200 bg-white p-4"><p className="text-sm text-rose-700">确定删除“{selected.name}”？此操作无法撤销。</p><div className="mt-3 flex gap-2"><button className={`${button} text-rose-700`} disabled={busy} onClick={() => void remove()}>{busy ? '删除中…' : '确认删除'}</button><button className={button} disabled={busy} onClick={() => setConfirmDelete(false)}>保留项目</button></div></div>}
+        <OpenAPIManager key={selected.id} projectId={selected.id} onBusyChange={setBusy} />
       </div>}
 
       {draft && <form aria-label={editingId ? '编辑项目' : '新建项目'} onSubmit={event => void save(event)} className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/30 p-5">
