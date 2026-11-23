@@ -2,8 +2,8 @@ export type ProjectInput = { name: string; description: string; base_url: string
 export type Project = ProjectInput & { id: string; created_at: string; updated_at: string }
 export type ProjectPage = { items: Project[]; total: number; limit: number; offset: number }
 
-export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const timeout = AbortSignal.timeout(8000)
+export async function request<T>(path: string, options: RequestInit = {}, timeoutMs = 8000): Promise<T> {
+  const timeout = AbortSignal.timeout(timeoutMs)
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
   const response = await fetch(path, {
     ...options,

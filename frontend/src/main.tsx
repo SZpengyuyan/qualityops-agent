@@ -73,7 +73,7 @@ function Dashboard() {
           <div><p className="text-xs font-semibold tracking-[0.15em] text-indigo-600">ENGINEERING WORKSPACE</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight">Overview</h1>
             <p className="mt-2 text-sm text-slate-500">智能质量保障平台 · 项目工作台</p></div>
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">DAY 03 / 14</span>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">DAY 04 / 14</span>
         </header>
 
         <section aria-labelledby="system-title" className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">

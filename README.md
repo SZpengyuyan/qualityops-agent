@@ -1,8 +1,8 @@
 # QualityOps Agent
 
-基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **工程基础设施、项目管理、OpenAPI 文档导入与接口目录**：可运行的 React Dashboard、FastAPI、SQLite 持久化与规范校验。
+基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **工程基础设施、项目管理、OpenAPI 导入、HTTP 执行与基础断言**，并提供本地订单 Demo API。
 
-RAG、测试生成、工具执行、Agent Trace 与 Benchmark 尚未实现；页面不展示模拟的业务统计。
+RAG、AI 测试生成、Agent 工具编排、Agent Trace 与 Benchmark 尚未实现；当前执行器是确定性的 HTTP 执行模块，页面不展示模拟的业务统计。
 
 ## 技术栈与目录
 
@@ -11,7 +11,7 @@ RAG、测试生成、工具执行、Agent Trace 与 Benchmark 尚未实现；页
 - `frontend/`：Dashboard、Vite `/api` 代理、生产 Nginx 代理。
 - `backend/app/`：应用工厂、数据库配置、项目模型与 Schema、独立项目路由；`backend/tests/`：隔离数据库测试。
 - `backend/app/services/openapi.py`：离线解析与规范校验；`backend/app/routers/openapi.py`：文档和接口目录 API。
-- `demo-api/`、`benchmark/`：后续阶段占位。
+- `demo-api/`：本地订单演示服务；`benchmark/`：后续阶段占位。
 - `scripts/`：Windows 启动脚本；`docs/`：阶段验证记录。
 
 ## Windows 本地启动
@@ -112,6 +112,41 @@ docker compose up --build
 ```
 
 访问地址同本地模式。SQLite 数据使用命名卷保存。不要与本地开发服务同时占用 8000、5173 端口。Docker 是否经过验证请以 `docs/day-1.md` 为准。
+
+## HTTP 执行与基础断言
+
+在项目根目录另开终端运行 `./scripts/demo-api.ps1`，启动 [本地订单 Demo](http://127.0.0.1:9000/docs)。创建基础地址为 `http://127.0.0.1:9000` 的项目，导入订单示例文档，打开 POST /orders。
+
+JSON 请求体填写：
+
+~~~json
+{"product_id":"demo","quantity":1}
+~~~
+
+期望状态码设为 201，JSON 相等断言填写：
+
+~~~json
+[{"pointer":"/status","expected":"created"}]
+~~~
+
+点击“发送请求并执行断言”，平台会实际请求目标服务并保存响应和断言结果。数量改为 4 时 Demo 返回 409：若预期 201 则失败；预期 409 且检查 /detail 等于 Insufficient stock 则通过。刷新页面后执行记录保留。Demo 订单仅存于内存，重启服务会清空。
+
+- 路径和查询参数使用 JSON 对象，值均为字符串，例如 `{"order_id":"实际订单ID"}`；路径参数须与占位符完全匹配。
+- 支持无认证 GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS，以及明确允许匿名的可选认证接口。暂不支持必填 Header/Cookie、Token 注入、文件上传或表单请求体。
+- 实际目标使用项目基础地址，忽略 OpenAPI servers。默认仅允许本地 9000 服务。其他服务需在 backend/.env 中配置 QUALITYOPS_ALLOWED_ORIGINS，以英文逗号分隔完整 origin（协议、主机、端口），随后重启后端。
+- 请求输入最多 64 KiB、JSON 断言最多 20 项；默认总超时 5 秒，API 可设置为 0.1–10 秒。响应最多 256 KiB，仅支持未压缩响应。
+- 不跟随重定向、不自动重试、不使用系统代理或隐式凭据。超时不保证远端操作未执行，重试前应确认目标服务状态。
+- passed 表示断言全部通过；failed 表示已收到响应但断言失败；error 表示超时、连接失败或响应超限等执行错误。前置校验失败返回 422，不发送请求、不生成记录。
+- 保存方法、路径、参数、响应和断言；JSON 中匹配 password/secret/token/cookie/api_key 等已知名称的字段会被遮盖，相应断言值也会遮盖。这不是任意文本秘密检测，此 MVP 应使用测试数据。
+- 编辑项目和重新导入文档保留执行历史；删除项目会清理关联记录。暂未实现可保存的测试用例集、批量回归、流程变量、自动 Schema 断言或 Agent 编排。
+
+新增接口（前缀 `/api/projects/{project_id}`）：
+
+- `POST /operations/{operation_id}/execute`：接受 path_params、query_params、body、expected_status、checks、timeout_seconds，完成后返回执行记录，HTTP 201。
+- `GET /executions?limit=20&offset=0`：分页历史。
+- `GET /executions/{execution_id}`：项目内执行详情。
+
+执行模块文件、命令与验证证据见 [Day 4 记录](docs/day-4.md)。当前开发分支为 `codex/day-4-api-execution`。Docker 流程尚未验证，现有 Compose 不包含 Demo API。
 
 ## GitHub 与密钥
 

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { errorMessage, request } from './api'
+import { ExecutionHistory, ExecutionPanel } from './ExecutionPanel'
 
 type DocumentInfo = { title: string; api_version: string; openapi_version: string; imported_at: string; operation_count: number; tags: string[] }
 type Operation = {
@@ -34,6 +35,8 @@ export function OpenAPIManager({ projectId, onBusyChange }: { projectId: string;
   const [operationId, setOperationId] = useState<string | null>(null)
   const [operation, setOperation] = useState<Operation | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [executionRevision, setExecutionRevision] = useState(0)
+  const changeExecutionBusy = useCallback((value: boolean) => { setBusy(value); onBusyChange(value) }, [onBusyChange])
   const base = `/api/projects/${projectId}`
 
   useEffect(() => () => onBusyChange(false), [onBusyChange])
@@ -122,8 +125,10 @@ export function OpenAPIManager({ projectId, onBusyChange }: { projectId: string;
         <p className="mt-2 break-words text-sm">{operation.summary}</p><p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-500">{operation.description}</p>
         <p className="mt-2 break-words text-xs text-slate-500">operationId: {operation.operation_id || '未定义'} · 标签: {operation.tags.join(', ') || '无'}</p>
         {([['参数（已合并路径级与操作级）', operation.parameters], ['请求体', operation.request_body], ['响应定义', operation.responses], ['认证要求', operation.security], ['服务地址定义', operation.servers]] as const).map(([title, value]) => <details key={title} open={title === '参数（已合并路径级与操作级）' || title === '响应定义'} className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium">{title}</summary><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-slate-600">{value === null ? '未定义' : JSON.stringify(value, null, 2)}</pre></details>)}
-        <p className="mt-3 text-xs text-slate-400">Schema 内的 $ref 保留为引用，当前页面展示文档定义，不会执行接口请求。</p>
+        <p className="mt-3 text-xs text-slate-400">Schema 内的 $ref 保留为引用；只有点击下方发送按钮才会执行接口。</p>
+        <ExecutionPanel key={operation.id} projectId={projectId} operation={operation} disabled={busy} onBusyChange={changeExecutionBusy} onExecuted={() => setExecutionRevision(value => value + 1)} />
       </div>}
+      <ExecutionHistory projectId={projectId} revision={executionRevision} />
     </section>
   )
 }
