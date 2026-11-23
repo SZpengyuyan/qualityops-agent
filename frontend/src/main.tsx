@@ -1,5 +1,6 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ProjectManager } from './ProjectManager'
 import './index.css'
 
 type Check = { ok: boolean; detail: string }
@@ -71,8 +72,8 @@ function Dashboard() {
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-8">
           <div><p className="text-xs font-semibold tracking-[0.15em] text-indigo-600">ENGINEERING WORKSPACE</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight">Overview</h1>
-            <p className="mt-2 text-sm text-slate-500">智能质量保障平台 · 工程基础设施</p></div>
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">DAY 01 / 14</span>
+            <p className="mt-2 text-sm text-slate-500">智能质量保障平台 · 项目工作台</p></div>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">DAY 02 / 14</span>
         </header>
 
         <section aria-labelledby="system-title" className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -97,10 +98,7 @@ function Dashboard() {
           {!checking && !connected && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">连接未就绪。请确认后端已在 127.0.0.1:8000 启动，然后重新检查。</p>}
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6"><p className="text-xs font-semibold tracking-wider text-indigo-600">CURRENT MILESTONE</p><h2 className="mt-3 text-lg font-semibold">Day 1 · 打好工程基础</h2><p className="mt-3 text-sm leading-7 text-slate-500">建立前后端连接、数据库访问和自动化验证，为后续 Agent 能力提供可运行的基础。</p></div>
-          <div className="rounded-2xl border border-dashed border-slate-300 p-6"><p className="text-xs font-semibold tracking-wider text-slate-400">UP NEXT</p><h2 className="mt-3 text-lg font-semibold">从接口到智能测试</h2><p className="mt-3 text-sm leading-7 text-slate-500">项目管理、OpenAPI 解析、RAG 与 Agent 执行将在后续阶段实现。当前没有测试任务或评测数据。</p></div>
-        </section>
+        <ProjectManager />
         <footer className="mt-10 text-xs text-slate-400">QualityOps Agent / Build confidence, one check at a time.</footer>
       </main>
     </div>

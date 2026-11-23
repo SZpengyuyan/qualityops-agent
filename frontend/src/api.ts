@@ -1,0 +1,26 @@
+export type ProjectInput = { name: string; description: string; base_url: string }
+export type Project = ProjectInput & { id: string; created_at: string; updated_at: string }
+export type ProjectPage = { items: Project[]; total: number; limit: number; offset: number }
+
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const timeout = AbortSignal.timeout(8000)
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
+  const response = await fetch(path, {
+    ...options,
+    signal,
+    headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
+  })
+  if (!response.ok) {
+    if (response.status === 422) throw new Error('输入格式不正确，请检查项目名称和 HTTP/HTTPS 地址。')
+    if (response.status === 404) throw new Error('项目不存在，可能已被删除。请刷新列表。')
+    throw new Error(`请求失败（HTTP ${response.status}），请稍后重试。`)
+  }
+  return response.status === 204 ? undefined as T : await response.json() as T
+}
+
+export function errorMessage(error: unknown): string {
+  if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+    return '请求超时，请刷新列表确认最新状态后再试。'
+  }
+  return error instanceof Error ? error.message : '网络异常，请确认后端连接。'
+}

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -19,7 +20,7 @@ class Base(DeclarativeBase):
 def build_engine(database_url: str):
     url = make_url(database_url)
     if url.get_backend_name() != "sqlite":
-        raise ValueError("Day 1 supports SQLite only")
+        raise ValueError("This MVP supports SQLite only")
     if url.database and url.database != ":memory:":
         path = Path(url.database)
         if not path.is_absolute():
@@ -35,3 +36,8 @@ def create_session_factory(engine):
 
 def configured_database_url() -> str:
     return os.getenv("DATABASE_URL", "sqlite:///./data/qualityops.db")
+
+
+def get_session(request: Request):
+    with request.app.state.session_factory() as session:
+        yield session

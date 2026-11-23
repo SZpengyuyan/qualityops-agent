@@ -1,15 +1,15 @@
 # QualityOps Agent
 
-基于 LLM 与 Agent 技术的智能质量保障平台。当前为 **Day 1 工程基础设施**：可运行的 React Dashboard、FastAPI 健康检查、SQLite 连接和 pytest 测试。
+基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **Day 1 工程基础设施 + Day 2 项目管理**：可运行的 React Dashboard、FastAPI 健康检查、SQLite 持久化与项目 CRUD。
 
-项目管理、OpenAPI 解析、RAG、测试生成、工具执行、Agent Trace 与 Benchmark 尚未实现；页面不展示模拟的业务统计。
+OpenAPI 解析、RAG、测试生成、工具执行、Agent Trace 与 Benchmark 尚未实现；页面不展示模拟的业务统计。
 
 ## 技术栈与目录
 
 - 前端：React、TypeScript、Vite、Tailwind CSS 4。
 - 后端：Python 3.11、FastAPI、SQLAlchemy 2.0、SQLite、HTTPX、pytest、python-dotenv。
 - `frontend/`：Dashboard、Vite `/api` 代理、生产 Nginx 代理。
-- `backend/app/`：应用工厂和数据库配置；`backend/tests/`：隔离数据库测试。
+- `backend/app/`：应用工厂、数据库配置、项目模型与 Schema、独立项目路由；`backend/tests/`：隔离数据库测试。
 - `demo-api/`、`benchmark/`：后续阶段占位。
 - `scripts/`：Windows 启动脚本；`docs/`：阶段验证记录。
 
@@ -47,7 +47,21 @@ npm install --prefix .tools --no-audit --no-fund --registry=https://registry.npm
 
 访问 [Dashboard](http://127.0.0.1:5173) 和 [API 文档](http://127.0.0.1:8000/docs)。关闭服务使用对应终端的 Ctrl+C。
 
-如需自定义数据库，将 `backend/.env.example` 复制为 `backend/.env`。默认数据库为 `backend/data/qualityops.db`，相对路径始终以 `backend/` 为基准。首次数据库健康检查会连接并创建 SQLite 文件；Day 1 尚无业务数据表。
+如需自定义数据库，将 `backend/.env.example` 复制为 `backend/.env`。默认数据库为 `backend/data/qualityops.db`，相对路径始终以 `backend/` 为基准。启动时通过 SQLAlchemy `create_all` 创建缺失的 `projects` 表，不删除已有数据。当前尚无版本化数据库迁移；后续修改已有表结构前需引入迁移方案。
+
+## 项目管理
+
+在 Dashboard 点击“新建项目”，填写名称、HTTP/HTTPS API 基础地址和可选描述。保存后可查看详情、编辑或删除；刷新页面后项目仍从 SQLite 加载。项目 URL 只用于保存配置，此阶段不会请求待测服务。
+
+- `GET /api/projects?limit=20&offset=0`：分页列表，返回 `items`、`total`、`limit`、`offset`；每页 1–100 条。
+- `POST /api/projects`：创建，返回 201。
+- `GET /api/projects/{id}`：详情，不存在返回 404。
+- `PUT /api/projects/{id}`：替换名称、描述、基础地址，返回更新后的项目。
+- `DELETE /api/projects/{id}`：删除，返回 204。
+
+名称去除首尾空白后需为 1–100 字，描述最多 2000 字。基础地址不接受凭据、查询参数和片段；无效输入返回 422。ID 使用 UUID，时间为 UTC。项目名称允许重复。前端每页显示 6 条，并提供加载、失败、保存和删除确认反馈。
+
+当前是本地单用户 MVP，未实现登录、权限或多用户隔离。验收记录：[Day 1](docs/day-1.md)、[Day 2](docs/day-2.md)。
 
 ## 健康检查与验收
 
@@ -80,7 +94,7 @@ docker compose up --build
 
 ## GitHub 与密钥
 
-Public 仓库：[SZpengyuyan/qualityops-agent](https://github.com/SZpengyuyan/qualityops-agent)。Day 1 开发分支为 `codex/day-1-infrastructure`。已完成设备认证并配置 `origin`；后续推送前可检查：
+Public 仓库：[SZpengyuyan/qualityops-agent](https://github.com/SZpengyuyan/qualityops-agent)。Day 1 分支为 `codex/day-1-infrastructure`，Day 2 分支为 `codex/day-2-project-management`。已完成设备认证并配置 `origin`；后续推送前可检查：
 
 ```powershell
 gh auth status

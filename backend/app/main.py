@@ -1,4 +1,4 @@
-"""Application factory; health checks are the only Day 1 API surface."""
+"""Application factory for health and project management endpoints."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -9,7 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.database import build_engine, configured_database_url, create_session_factory
+from app.database import Base, build_engine, configured_database_url, create_session_factory, get_session
+from app.routers.projects import router as projects_router
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,14 @@ def create_app(database_url: str | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        Base.metadata.create_all(engine)
         yield
         engine.dispose()
 
     app = FastAPI(title="QualityOps Agent", version="0.1.0", lifespan=lifespan)
     app.state.engine = engine
-
-    def get_session():
-        with session_factory() as session:
-            yield session
+    app.state.session_factory = session_factory
+    app.include_router(projects_router)
 
     @app.get("/")
     def root():
