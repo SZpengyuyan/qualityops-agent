@@ -31,7 +31,7 @@
 ## 限制与后续步骤
 
 - 测试有 1 条第三方弃用警告：Starlette TestClient 提示未来将从 HTTPX 迁移至 httpx2；当前 HTTPX 测试全部通过，未屏蔽警告。
-- GitHub CLI 2.105.0 的 `gh auth status` 返回未登录；无 Git 远程配置。需要用户完成 `gh auth login --web`，再检查目标仓库是否存在，之后创建 Public 仓库并推送。
+- GitHub CLI 2.105.0：用户已完成设备认证，`gh auth status` 确认账户为 `SZpengyuyan`。检查目标仓库不存在后，已创建 Public 仓库 https://github.com/SZpengyuyan/qualityops-agent 并配置 `origin`。开发分支为 `codex/day-1-infrastructure`。
 - 本机未找到 Docker 命令。Dockerfile、Nginx 反向代理和 Compose 已提供，但未执行容器构建或启动，不计入已验证结果。
 - 未集成 LLM、RAG、LangGraph 或任何 API Key；后续按 MVP 分阶段开发。
 - 验收完成后保留本地 8000/5173 服务供演示，后台进程号与日志存放在被忽略的 `.verification/`。重启电脑后需按 README 启动服务。

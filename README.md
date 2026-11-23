@@ -80,12 +80,12 @@ docker compose up --build
 
 ## GitHub 与密钥
 
-计划使用独立 Public 仓库 `qualityops-agent`。在创建和推送前检查：
+Public 仓库：[SZpengyuyan/qualityops-agent](https://github.com/SZpengyuyan/qualityops-agent)。Day 1 开发分支为 `codex/day-1-infrastructure`。已完成设备认证并配置 `origin`；后续推送前可检查：
 
 ```powershell
 gh auth status
 git remote -v
-gh repo view OWNER/qualityops-agent
+gh repo view SZpengyuyan/qualityops-agent
 ```
 
 若未认证，需要用户完成 `gh auth login --web`。请勿把 API Key 写入代码或 Git；当前阶段无需任何 AI API Key。`.venv/`、`.tools/`、`.env`、数据库与构建产物均已忽略。
