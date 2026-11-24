@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_session
-from app.models import Execution, OpenAPIDocument, Project
+from app.models import Execution, OpenAPIDocument, Project, SuiteRun, TestCase, TestSuite
 from app.schemas import ProjectInput, ProjectList, ProjectRead
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -60,6 +60,10 @@ def update_project(project_id: UUID, payload: ProjectInput, session: DatabaseSes
 @router.delete("/{project_id}", status_code=204)
 def delete_project(project_id: UUID, session: DatabaseSession):
     project = find_project(project_id, session)
+    if session.scalar(select(SuiteRun.id).where(SuiteRun.project_id == str(project_id), SuiteRun.status == 'running')):
+        raise HTTPException(status_code=409, detail='项目有运行中的用例集，请等待完成后删除。')
+    for model in (SuiteRun, TestSuite, TestCase):
+        session.execute(delete(model).where(model.project_id == str(project_id)))
     session.execute(delete(Execution).where(Execution.project_id == str(project_id)))
     document = session.get(OpenAPIDocument, str(project_id))
     if document:

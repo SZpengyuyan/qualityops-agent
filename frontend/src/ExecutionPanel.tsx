@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { errorMessage, request } from './api'
 
-type Execution = {
+export type Execution = {
   id: string; status: 'passed' | 'failed' | 'error'; duration_ms: number; created_at: string
   request: { method: string; path: string }; response: { status_code: number; body: unknown } | null
   assertions: { type: string; pointer?: string; expected: unknown; actual: unknown; passed: boolean; error?: string }[]
@@ -12,7 +12,7 @@ const button = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm ho
 const input = 'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:outline-indigo-500'
 const statusNames = { passed: '通过', failed: '断言失败', error: '执行错误' }
 
-function ExecutionResult({ value }: { value: Execution }) {
+export function ExecutionResult({ value }: { value: Execution }) {
   return <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
     <p role="status" className={'font-semibold ' + (value.status === 'passed' ? 'text-emerald-700' : value.status === 'failed' ? 'text-rose-700' : 'text-amber-800')}>{statusNames[value.status]} · {value.duration_ms} ms{value.response ? ' · HTTP ' + value.response.status_code : ''}</p>
     <p className="mt-2 break-all text-xs text-slate-400">记录 ID：{value.id} · {new Date(value.created_at).toLocaleString('zh-CN')}</p>
@@ -28,9 +28,9 @@ function stringMap(text: string): Record<string, string> {
   return value as Record<string, string>
 }
 
-export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, onExecuted }: {
+export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, onExecuted, onCaseSaved }: {
   projectId: string; operation: { id: string; method: string; path: string; responses: Record<string, unknown> }
-  disabled: boolean; onBusyChange: (busy: boolean) => void; onExecuted: () => void
+  disabled: boolean; onBusyChange: (busy: boolean) => void; onExecuted: () => void; onCaseSaved: () => void
 }) {
   const [pathParams, setPathParams] = useState(() => JSON.stringify(Object.fromEntries([...operation.path.matchAll(/\{([^{}]+)\}/g)].map(match => [match[1], ''])), null, 2))
   const [queryParams, setQueryParams] = useState('{}')
@@ -40,14 +40,32 @@ export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, o
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<Execution | null>(null)
+  const [caseName, setCaseName] = useState(operation.method + ' ' + operation.path)
+  const [notice, setNotice] = useState('')
   useEffect(() => () => onBusyChange(false), [onBusyChange])
+
+  function readPayload() {
+    return { path_params: stringMap(pathParams), query_params: stringMap(queryParams), body: body.trim() ? JSON.parse(body) as unknown : null, expected_status: expectedStatus, checks: JSON.parse(checks) as unknown }
+  }
+
+  async function saveCase() {
+    if (busy || disabled || !caseName.trim()) return
+    setError(''); setNotice('')
+    try {
+      const payload = readPayload()
+      setBusy(true); onBusyChange(true)
+      await request('/api/projects/' + projectId + '/test-cases', { method: 'POST', body: JSON.stringify({ name: caseName.trim(), operation_id: operation.id, input: payload }) })
+      setNotice('已保存为测试用例，可在下方测试资产中重复执行。'); onCaseSaved()
+    } catch (caught) { setError(caught instanceof SyntaxError ? '请检查参数、请求体和断言的 JSON 格式。' : errorMessage(caught)) }
+    finally { setBusy(false); onBusyChange(false) }
+  }
 
   async function execute(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || disabled) return
-    setError(''); setResult(null)
+    setError(''); setResult(null); setNotice('')
     try {
-      const payload = { path_params: stringMap(pathParams), query_params: stringMap(queryParams), body: body.trim() ? JSON.parse(body) as unknown : null, expected_status: expectedStatus, checks: JSON.parse(checks) as unknown }
+      const payload = readPayload()
       setBusy(true); onBusyChange(true)
       const value = await request<Execution>('/api/projects/' + projectId + '/operations/' + operation.id + '/execute', { method: 'POST', body: JSON.stringify(payload) }, 15000)
       setResult(value); onExecuted()
@@ -65,9 +83,12 @@ export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, o
         <label className="text-sm">期望状态码<input className={input} required type="number" min={100} max={599} value={expectedStatus} onChange={event => setExpectedStatus(Number(event.target.value))} /></label>
         <label className="text-sm">JSON 相等断言<textarea className={input} rows={4} value={checks} maxLength={20000} onChange={event => setChecks(event.target.value)} placeholder={'[{"pointer":"/status","expected":"created"}]'} /><span className="mt-1 block text-xs text-slate-400">使用 JSON Pointer，例如 /status 或 /items/0/id；[] 表示只检查状态码。</span></label>
         <button className={button + ' justify-self-start sm:col-span-2'} type="submit" disabled={busy || disabled}>{busy ? '执行中…' : '发送请求并执行断言'}</button>
+        <label className="text-sm">用例名称<input className={input} maxLength={100} value={caseName} onChange={event => setCaseName(event.target.value)} /></label>
+        <button className={button + ' self-end justify-self-start'} type="button" disabled={busy || disabled || !caseName.trim()} onClick={() => void saveCase()}>保存为测试用例</button>
       </fieldset>
     </form>
     {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
+    {notice && <p role="status" className="mt-3 text-sm text-emerald-700">{notice}</p>}
     {result && <ExecutionResult value={result} />}
   </section>
 }

@@ -1,6 +1,6 @@
 # QualityOps Agent
 
-基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **工程基础设施、项目管理、OpenAPI 导入、HTTP 执行与基础断言**，并提供本地订单 Demo API。
+基于 LLM 与 Agent 技术的智能质量保障平台。当前已完成 **工程基础设施、项目管理、OpenAPI 导入、HTTP 执行、保存用例及用例集回归**，并提供本地订单 Demo API。
 
 RAG、AI 测试生成、Agent 工具编排、Agent Trace 与 Benchmark 尚未实现；当前执行器是确定性的 HTTP 执行模块，页面不展示模拟的业务统计。
 
@@ -48,7 +48,7 @@ npm install --prefix .tools --no-audit --no-fund --registry=https://registry.npm
 
 访问 [Dashboard](http://127.0.0.1:5173) 和 [API 文档](http://127.0.0.1:8000/docs)。关闭服务使用对应终端的 Ctrl+C。
 
-如需自定义数据库，将 `backend/.env.example` 复制为 `backend/.env`。默认数据库为 `backend/data/qualityops.db`，相对路径始终以 `backend/` 为基准。启动时通过 SQLAlchemy `create_all` 创建缺失的 `projects` 和 `openapi_documents` 表，不删除已有数据。当前尚无版本化数据库迁移；后续修改已有表结构前需引入迁移方案。
+如需自定义数据库，将 `backend/.env.example` 复制为 `backend/.env`。默认数据库为 `backend/data/qualityops.db`，相对路径始终以 `backend/` 为基准。启动时通过 SQLAlchemy `create_all` 创建缺失的项目、文档、执行及测试资产表，不删除已有数据。当前尚无版本化数据库迁移；后续修改已有表结构前需引入迁移方案。
 
 ## 项目管理
 
@@ -62,7 +62,7 @@ npm install --prefix .tools --no-audit --no-fund --registry=https://registry.npm
 
 名称去除首尾空白后需为 1–100 字，描述最多 2000 字。基础地址不接受凭据、查询参数和片段；无效输入返回 422。ID 使用 UUID，时间为 UTC。项目名称允许重复。前端每页显示 6 条，并提供加载、失败、保存和删除确认反馈。
 
-当前是本地单用户 MVP，未实现登录、权限或多用户隔离。验收记录：[Day 1](docs/day-1.md)、[Day 2](docs/day-2.md)、[Day 3](docs/day-3.md)。
+当前是本地单用户 MVP，未实现登录、权限或多用户隔离。验收记录：[Day 1](docs/day-1.md)、[Day 2](docs/day-2.md)、[Day 3](docs/day-3.md)、[Day 4](docs/day-4.md)、[Day 5](docs/day-5.md)。
 
 ## OpenAPI 文档导入与接口目录
 
@@ -138,7 +138,7 @@ JSON 请求体填写：
 - 不跟随重定向、不自动重试、不使用系统代理或隐式凭据。超时不保证远端操作未执行，重试前应确认目标服务状态。
 - passed 表示断言全部通过；failed 表示已收到响应但断言失败；error 表示超时、连接失败或响应超限等执行错误。前置校验失败返回 422，不发送请求、不生成记录。
 - 保存方法、路径、参数、响应和断言；JSON 中匹配 password/secret/token/cookie/api_key 等已知名称的字段会被遮盖，相应断言值也会遮盖。这不是任意文本秘密检测，此 MVP 应使用测试数据。
-- 编辑项目和重新导入文档保留执行历史；删除项目会清理关联记录。暂未实现可保存的测试用例集、批量回归、流程变量、自动 Schema 断言或 Agent 编排。
+- 编辑项目和重新导入文档保留执行历史；删除项目会清理关联记录。已支持保存用例及顺序回归，暂未实现流程变量、自动 Schema 断言或 Agent 编排。
 
 新增接口（前缀 `/api/projects/{project_id}`）：
 
@@ -146,7 +146,34 @@ JSON 请求体填写：
 - `GET /executions?limit=20&offset=0`：分页历史。
 - `GET /executions/{execution_id}`：项目内执行详情。
 
-执行模块文件、命令与验证证据见 [Day 4 记录](docs/day-4.md)。当前开发分支为 `codex/day-4-api-execution`。Docker 流程尚未验证，现有 Compose 不包含 Demo API。
+执行模块文件、命令与验证证据见 [Day 4 记录](docs/day-4.md)。当前开发分支为 `codex/day-5-test-assets`。Docker 流程尚未验证，现有 Compose 不包含 Demo API。
+
+## 保存测试用例与用例集回归
+
+1. 打开已导入接口，在执行表单中配置参数、请求体、预期状态和 JSON 断言，填写“用例名称”，点击“保存为测试用例”。保存本身不发送请求，目标允许地址在实际运行时检查。
+2. 在项目详情下方“测试资产与回归”查看、编辑、单独运行或删除用例。编辑使用请求与断言 JSON 配置；编辑表单保留所属接口，接口已删除时可从新接口重新建立用例。
+3. 点击“新建用例集”，勾选用例，通过上移/下移调整顺序，保存后点击“运行用例集”。首次运行与后续回归均复用保存的配置。
+4. 在回归运行记录中查看整体统计、每条用例的断言、响应和输入快照。修改用例、项目地址或用例集顺序，不会改写既有快照。
+
+当前每项目最多 100 条用例、50 个用例集，每集最多 10 条且不能重复。空用例集可以保存，但不能运行。被用例集引用的用例需先从集合移除才能删除；删除用例或用例集保留旧运行记录，删除项目会清理全部关联资产和历史。
+
+用例集运行前会校验所有用例，冻结配置、目标地址、顺序与名称；任何前置校验失败都不会发送请求。文档内容有变化（包括组件 Schema）时，用例需重新编辑并保存；内容相同、仅 JSON 字段顺序或格式变化的重新导入不影响用例。
+
+执行采用同步顺序模式：每条失败后继续后续用例；总时限 30 秒，到期后剩余项标为跳过，当前项可能结果未知。每个项目仅允许一个运行中的用例集，重复启动返回 409。刷新页面可重新读取记录，平台不自动重试请求。
+
+当前服务须以**单进程、单 worker**运行。启动时把遗留运行标为 interrupted，不自动重放请求；多 worker、后台任务队列、跨用例变量传递及自动执行流程尚未实现。
+
+用例配置保留原始输入以支持再次执行，请勿保存真实密钥。运行历史会遮盖已知敏感字段以及相应 JSON 指针的期望值；遮盖不是加密或完整秘密识别。当前输入快照用于审阅，不提供历史快照直接重放。
+
+新增接口（前缀 `/api/projects/{project_id}`）：
+
+- `GET/POST /test-cases`，`GET/PUT/DELETE /test-cases/{case_id}`：用例管理，创建/修改接受 name、description、operation_id、input（沿用执行配置）。
+- `POST /test-cases/{case_id}/execute`：使用保存配置执行，返回执行记录。
+- `GET/POST /test-suites`，`GET/PUT/DELETE /test-suites/{suite_id}`：用例集管理，接受 name、description、按顺序排列的 case_ids。
+- `POST /test-suites/{suite_id}/run`：顺序运行并返回汇总、快照和逐项结果。
+- `GET /suite-runs?limit=10&offset=0`，`GET /suite-runs/{run_id}`：回归记录与详情。
+
+详细修改和验收证据见 [Day 5 记录](docs/day-5.md)。
 
 ## GitHub 与密钥
 

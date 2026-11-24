@@ -15,7 +15,7 @@ const button = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm ho
 const input = 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-indigo-500'
 const pageSize = 10
 
-export function OpenAPIManager({ projectId, onBusyChange }: { projectId: string; onBusyChange: (busy: boolean) => void }) {
+export function OpenAPIManager({ projectId, onBusyChange, assetRevision, onCaseSaved }: { projectId: string; onBusyChange: (busy: boolean) => void; assetRevision: number; onCaseSaved: () => void }) {
   const [document, setDocument] = useState<DocumentInfo | null>(null)
   const [page, setPage] = useState<OperationPage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -126,9 +126,9 @@ export function OpenAPIManager({ projectId, onBusyChange }: { projectId: string;
         <p className="mt-2 break-words text-xs text-slate-500">operationId: {operation.operation_id || '未定义'} · 标签: {operation.tags.join(', ') || '无'}</p>
         {([['参数（已合并路径级与操作级）', operation.parameters], ['请求体', operation.request_body], ['响应定义', operation.responses], ['认证要求', operation.security], ['服务地址定义', operation.servers]] as const).map(([title, value]) => <details key={title} open={title === '参数（已合并路径级与操作级）' || title === '响应定义'} className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium">{title}</summary><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-slate-600">{value === null ? '未定义' : JSON.stringify(value, null, 2)}</pre></details>)}
         <p className="mt-3 text-xs text-slate-400">Schema 内的 $ref 保留为引用；只有点击下方发送按钮才会执行接口。</p>
-        <ExecutionPanel key={operation.id} projectId={projectId} operation={operation} disabled={busy} onBusyChange={changeExecutionBusy} onExecuted={() => setExecutionRevision(value => value + 1)} />
+        <ExecutionPanel key={operation.id} projectId={projectId} operation={operation} disabled={busy} onBusyChange={changeExecutionBusy} onExecuted={() => setExecutionRevision(value => value + 1)} onCaseSaved={onCaseSaved} />
       </div>}
-      <ExecutionHistory projectId={projectId} revision={executionRevision} />
+      <ExecutionHistory projectId={projectId} revision={executionRevision + assetRevision} />
     </section>
   )
 }

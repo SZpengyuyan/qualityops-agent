@@ -49,14 +49,14 @@ def origin(url: httpx.URL) -> str:
     return f'{url.scheme}://{url.host}:{port}'
 
 
-def build_url(base_url: str, operation: dict, payload: ExecutionInput) -> str:
+def build_url(base_url: str, operation: dict, payload: ExecutionInput, *, check_origin: bool = True) -> str:
     base = httpx.URL(base_url)
     allowed = os.getenv('QUALITYOPS_ALLOWED_ORIGINS', 'http://127.0.0.1:9000').split(',')
     try:
         allowed_origins = {origin(httpx.URL(value.strip())) for value in allowed if value.strip()}
     except httpx.InvalidURL:
         raise ValueError('QUALITYOPS_ALLOWED_ORIGINS 配置格式无效。') from None
-    if origin(base) not in allowed_origins:
+    if check_origin and origin(base) not in allowed_origins:
         raise ValueError('目标服务未获准执行，请配置后端 QUALITYOPS_ALLOWED_ORIGINS。')
     if operation['method'] not in {'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'}:
         raise ValueError('当前不支持此 HTTP 方法。')
@@ -121,6 +121,14 @@ def json_pointer(value, pointer):
         else:
             raise KeyError(pointer)
     return value
+
+
+def input_snapshot(payload: ExecutionInput) -> dict:
+    snapshot = redact(payload.model_dump())
+    for check in snapshot['checks']:
+        if SENSITIVE.search(check['pointer']):
+            check['expected'] = '[REDACTED]'
+    return snapshot
 
 
 def json_equal(actual, expected):
