@@ -8,6 +8,7 @@ from app.models import Execution
 from app.routers.openapi import get_operation
 from app.routers.projects import DatabaseSession, find_project
 from app.services.execution import ExecutionInput, build_url, perform, redact
+from app.services.flow import CaseExecutionInput, reference_names
 
 router = APIRouter(prefix='/api/projects/{project_id}', tags=['executions'])
 
@@ -21,6 +22,8 @@ async def execute_operation(project_id: UUID, operation_id: UUID, payload: Execu
     project = find_project(project_id, session)
     operation = get_operation(project_id, operation_id, session)
     try:
+        if reference_names(CaseExecutionInput.model_validate(payload.model_dump())):
+            raise ValueError('单次接口发送不解析流程变量，请保存用例并放入用例集执行。')
         url = build_url(project.base_url, operation, payload)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

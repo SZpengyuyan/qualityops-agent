@@ -14,7 +14,8 @@ from app.models import Execution, OpenAPIDocument, SuiteRun, TestCase, TestSuite
 from app.routers.executions import execution_read
 from app.routers.openapi import get_operation
 from app.routers.projects import DatabaseSession, find_project
-from app.services.execution import ExecutionInput, build_url, input_snapshot, perform, redact
+from app.services.execution import build_url, input_snapshot, perform, redact
+from app.services.flow import CaseExecutionInput, collect_exports, preview_input, reference_names, resolve_input, validate_dependencies
 
 router = APIRouter(prefix='/api/projects/{project_id}', tags=['test-assets'])
 SUITE_TIMEOUT_SECONDS = 30
@@ -28,7 +29,7 @@ class AssetInput(BaseModel):
 
 class CaseInput(AssetInput):
     operation_id: UUID
-    input: ExecutionInput
+    input: CaseExecutionInput
 
 
 class SuiteInput(AssetInput):
@@ -69,8 +70,8 @@ def prepare_case(case, project, session):
     operation = get_operation(UUID(project.id), UUID(case.operation_id), session)
     if catalog_snapshot(project.id, operation, session) != case.operation:
         raise HTTPException(status_code=422, detail='接口定义已变更，请编辑并重新保存相关用例。')
-    payload = ExecutionInput.model_validate(case.input)
-    url = validate_input(project.base_url, operation, payload, running=True)
+    payload = CaseExecutionInput.model_validate(case.input)
+    url = validate_input(project.base_url, operation, preview_input(payload), running=True)
     return copy.deepcopy(operation), payload, url
 
 
@@ -105,7 +106,7 @@ def list_cases(project_id: UUID, session: DatabaseSession):
 def write_case(project_id, payload, case, session):
     project = find_project(project_id, session)
     operation = get_operation(project_id, payload.operation_id, session)
-    validate_input(project.base_url, operation, payload.input)
+    validate_input(project.base_url, operation, preview_input(payload.input))
     case.name, case.description = payload.name, payload.description
     case.operation_id, case.operation = str(payload.operation_id), catalog_snapshot(project_id, operation, session)
     case.input = payload.input.model_dump()
@@ -151,11 +152,20 @@ async def execute_case(project_id: UUID, case_id: UUID, session: DatabaseSession
     project = find_project(project_id, session)
     case = find_asset(TestCase, case_id, project_id, session)
     operation, payload, url = prepare_case(case, project, session)
+    if reference_names(payload):
+        raise HTTPException(status_code=422, detail='引用变量的用例需要在用例集中执行，且生产变量的用例必须排在前面。')
     snapshot = snapshot_case(case, project.base_url, payload)
+    actual = resolve_input(payload, {})
     session.rollback()
-    result = await perform(url, operation, payload)
+    result = await perform(url, operation, actual)
+    try:
+        exports = collect_exports(payload.extract, result)
+    except ValueError as error:
+        result.update(status='error', error=str(error))
+        exports = {}
+    snapshot = {**snapshot, 'template_input': snapshot['input'], 'input': input_snapshot(actual), 'exports': exports}
     find_project(project_id, session)
-    record = store_execution(str(project_id), operation, payload, result, snapshot, session)
+    record = store_execution(str(project_id), operation, actual, result, snapshot, session)
     session.commit()
     return execution_read(record)
 
@@ -167,8 +177,14 @@ def list_suites(project_id: UUID, session: DatabaseSession):
 
 
 def write_suite(project_id, payload, suite, session):
+    inputs = []
     for case_id in payload.case_ids:
-        find_asset(TestCase, case_id, project_id, session)
+        case = find_asset(TestCase, case_id, project_id, session)
+        inputs.append(CaseExecutionInput.model_validate(case.input))
+    try:
+        validate_dependencies(inputs)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     suite.name, suite.description = payload.name, payload.description
     suite.case_ids = [str(case_id) for case_id in payload.case_ids]
     session.add(suite)
@@ -229,6 +245,10 @@ async def run_suite(project_id: UUID, suite_id: UUID, session: DatabaseSession):
         case = find_asset(TestCase, case_id, project_id, session)
         prepared.append(prepare_case(case, project, session))
         snapshots.append(snapshot_case(case, project.base_url, prepared[-1][1]))
+    try:
+        validate_dependencies([payload for _, payload, _ in prepared])
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     run = SuiteRun(project_id=str(project_id), suite_id=suite.id, suite_name=suite.name, status='running',
                    snapshot=snapshots, results=[{'case_id': item['case_id'], 'name': item['name'], 'status': 'pending', 'execution_id': None, 'error': None} for item in snapshots])
     session.add(run)
@@ -238,14 +258,37 @@ async def run_suite(project_id: UUID, suite_id: UUID, session: DatabaseSession):
         session.rollback()
         raise HTTPException(status_code=409, detail='此项目已有运行中的用例集，请勿重复启动。') from None
     index = 0
+    variables = {}
     try:
         async with asyncio.timeout(SUITE_TIMEOUT_SECONDS):
             for index, (operation, payload, url) in enumerate(prepared):
-                run.results = [{**item, 'status': 'running'} if position == index else item for position, item in enumerate(run.results)]
+                used = sorted(reference_names(payload))
+                missing = set(used) - variables.keys()
+                if missing:
+                    run.results = [{**item, 'status': 'skipped', 'variables_used': used, 'resolved_input': None, 'exports': {}, 'error': '上游未成功产生所需变量，未发送请求：' + ', '.join(sorted(missing))} if position == index else item for position, item in enumerate(run.results)]
+                    session.commit()
+                    continue
+                try:
+                    actual = resolve_input(payload, variables)
+                    url = validate_input(snapshots[index]['base_url'], operation, actual, running=True)
+                except (ValueError, HTTPException) as error:
+                    message = error.detail if isinstance(error, HTTPException) else str(error)
+                    run.results = [{**item, 'status': 'error', 'variables_used': used, 'resolved_input': None, 'exports': {}, 'error': message} if position == index else item for position, item in enumerate(run.results)]
+                    session.commit()
+                    continue
+                resolved = input_snapshot(actual)
+                run.results = [{**item, 'status': 'running', 'variables_used': used, 'resolved_input': resolved, 'exports': {}} if position == index else item for position, item in enumerate(run.results)]
                 session.commit()
-                result = await perform(url, operation, payload)
-                record = store_execution(str(project_id), operation, payload, result, snapshots[index], session)
-                run.results = [{**item, 'status': result['status'], 'execution_id': record.id, 'error': result['error']} if position == index else item for position, item in enumerate(run.results)]
+                result = await perform(url, operation, actual)
+                try:
+                    exports = collect_exports(payload.extract, result)
+                except ValueError as error:
+                    result.update(status='error', error=str(error))
+                    exports = {}
+                variables.update(exports)
+                executed_snapshot = {**snapshots[index], 'template_input': snapshots[index]['input'], 'input': resolved, 'variables_used': used, 'exports': exports}
+                record = store_execution(str(project_id), operation, actual, result, executed_snapshot, session)
+                run.results = [{**item, 'status': result['status'], 'execution_id': record.id, 'error': result['error'], 'exports': exports} if position == index else item for position, item in enumerate(run.results)]
                 session.commit()
     except TimeoutError:
         run.results = [{**item, 'status': 'error' if position == index else 'skipped', 'error': '用例集达到 30 秒总时限；远端操作结果可能未知，未自动重试。'} if item['status'] in {'running', 'pending'} else item for position, item in enumerate(run.results)]

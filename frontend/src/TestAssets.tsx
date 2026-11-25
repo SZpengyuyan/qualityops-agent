@@ -7,7 +7,7 @@ import type { Execution } from './ExecutionPanel'
 type Case = { id: string; name: string; description: string; operation_id: string; operation: { method: string; path: string }; input: unknown }
 type Suite = { id: string; name: string; description: string; case_ids: string[] }
 type Run = { id: string; suite_name: string; status: string; created_at: string; summary: { total: number; passed: number; failed: number; error: number; skipped: number } }
-type RunDetail = Run & { snapshot: { name: string; input: unknown; base_url: string; method: string; path: string }[]; results: { name: string; status: string; error: string | null; execution: Execution | null }[] }
+type RunDetail = Run & { snapshot: { name: string; input: unknown; base_url: string; method: string; path: string }[]; results: { name: string; status: string; error: string | null; execution: Execution | null; variables_used?: string[]; resolved_input?: unknown; exports?: Record<string, unknown> }[] }
 type SuiteDraft = { id: string | null; name: string; description: string; case_ids: string[] }
 const button = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50'
 const input = 'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-indigo-500'
@@ -82,6 +82,7 @@ export function TestAssets({ projectId, revision, onBusyChange, onChanged }: { p
   return <section aria-label="测试资产与回归" className="mt-8 rounded-xl border border-indigo-100 bg-white p-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-lg font-semibold">测试资产与回归</h4><p className="mt-1 text-xs text-slate-500">保存用例，按指定顺序一键回归。每项目最多 100 条用例、50 个用例集，每集最多 10 条。</p></div><button className={button} disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}>刷新测试资产</button></div>
     <p className="mt-3 text-xs text-slate-500">在上方接口执行表单中配置请求和断言，填写用例名称后点击“保存为测试用例”。用例保存原始配置，请使用测试数据。</p>
+    <p className="mt-2 text-xs text-slate-500">流程示例：创建订单用例设置 extract 为 {'{"order_id":"/id"}'}，后续查询用例的路径参数设置为 {'{"order_id":"{{order_id}}"}'}。生产变量的用例必须排在前面；上游失败时依赖项会跳过。</p>
     {busy && <p role="status" className="mt-3 text-sm text-indigo-700">正在处理，请勿重复提交。用例集总执行时间最多 30 秒。</p>}
     {notice && <p role="status" className="mt-3 text-sm text-emerald-700">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
@@ -110,7 +111,7 @@ export function TestAssets({ projectId, revision, onBusyChange, onChanged }: { p
         <label className="text-sm">用例名称<input className={input} required maxLength={100} value={editingCase.name} onChange={event => setEditingCase({ ...editingCase, name: event.target.value })} /></label>
         <label className="text-sm">用例描述<textarea className={input} maxLength={2000} value={editingCase.description} onChange={event => setEditingCase({ ...editingCase, description: event.target.value })} /></label>
         <p className="text-xs text-slate-500">{editingCase.operation.method} {editingCase.operation.path} · 保存时会重新校验当前接口定义。</p>
-        <label className="text-sm">请求与断言配置 JSON<textarea className={input + ' font-mono text-xs'} rows={12} required maxLength={70000} value={caseConfig} onChange={event => setCaseConfig(event.target.value)} /><span className="mt-1 block text-xs text-slate-500">包含 path_params、query_params、body、expected_status、checks、timeout_seconds。</span></label>
+        <label className="text-sm">请求与断言配置 JSON<textarea className={input + ' font-mono text-xs'} rows={12} required maxLength={70000} value={caseConfig} onChange={event => setCaseConfig(event.target.value)} /><span className="mt-1 block text-xs text-slate-500">包含 path_params、query_params、body、expected_status、checks、timeout_seconds、extract。引用变量需使用完整字段值 {'{{name}}'}；不支持字符串拼接。</span></label>
         <div className="flex gap-2"><button className={button} type="submit">保存用例修改</button><button className={button} type="button" onClick={() => setEditingCase(null)}>取消编辑用例</button></div>
       </fieldset>
     </form>}
@@ -127,7 +128,12 @@ export function TestAssets({ projectId, revision, onBusyChange, onChanged }: { p
     </form>}
     {caseResult && <div className="mt-5"><button className={button} onClick={() => setCaseResult(null)}>关闭用例执行结果</button><ExecutionResult value={caseResult} /></div>}
     {selectedRun && <section aria-label="回归运行详情" className="mt-5 rounded-lg border border-indigo-200 p-4"><div className="flex flex-wrap justify-between gap-2"><h5 className="font-semibold">{selectedRun.suite_name} · {labels[selectedRun.status] || selectedRun.status}</h5><button className={button} onClick={() => setSelectedRun(null)}>关闭回归详情</button></div><p className="mt-3 text-sm">共 {selectedRun.summary.total} 条，通过 {selectedRun.summary.passed}，失败 {selectedRun.summary.failed}，错误 {selectedRun.summary.error}，跳过 {selectedRun.summary.skipped}。</p><p className="mt-1 break-all text-xs text-slate-400">运行 ID：{selectedRun.id} · {new Date(selectedRun.created_at).toLocaleString('zh-CN')}</p>
-      {selectedRun.snapshot.map((snapshot, index) => <details key={index} className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer break-words text-sm font-medium">{index + 1}. {snapshot.name} · {labels[selectedRun.results[index]?.status] || selectedRun.results[index]?.status}</summary><p className="mt-2 break-all font-mono text-xs">{snapshot.method} {snapshot.path} · {snapshot.base_url}</p><details className="mt-2"><summary className="cursor-pointer text-xs">本次运行输入快照</summary><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(snapshot.input, null, 2)}</pre></details>{selectedRun.results[index]?.error && <p className="mt-2 text-sm text-amber-800">{selectedRun.results[index].error}</p>}{selectedRun.results[index]?.execution && <ExecutionResult value={selectedRun.results[index].execution!} />}</details>)}
+      {selectedRun.snapshot.map((snapshot, index) => <details key={index} className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer break-words text-sm font-medium">{index + 1}. {snapshot.name} · {labels[selectedRun.results[index]?.status] || selectedRun.results[index]?.status}</summary><p className="mt-2 break-all font-mono text-xs">{snapshot.method} {snapshot.path} · {snapshot.base_url}</p>
+        <details className="mt-2"><summary className="cursor-pointer text-xs">用例配置快照（含模板）</summary><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(snapshot.input, null, 2)}</pre></details>
+        {selectedRun.results[index]?.variables_used && <p className="mt-2 text-xs text-slate-500">引用变量：{selectedRun.results[index].variables_used!.join(', ') || '无'}</p>}
+        {selectedRun.results[index]?.resolved_input != null && <details className="mt-2" open><summary className="cursor-pointer text-xs">实际请求输入</summary><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(selectedRun.results[index].resolved_input, null, 2)}</pre></details>}
+        {selectedRun.results[index]?.exports && Object.keys(selectedRun.results[index].exports!).length > 0 && <details className="mt-2" open><summary className="cursor-pointer text-xs">本步骤导出变量</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(selectedRun.results[index].exports, null, 2)}</pre></details>}
+        {selectedRun.results[index]?.error && <p className="mt-2 text-sm text-amber-800">{selectedRun.results[index].error}</p>}{selectedRun.results[index]?.execution && <ExecutionResult value={selectedRun.results[index].execution!} />}</details>)}
     </section>}
   </section>
 }

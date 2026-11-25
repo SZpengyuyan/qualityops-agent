@@ -4,7 +4,7 @@ import { errorMessage, request } from './api'
 
 export type Execution = {
   id: string; status: 'passed' | 'failed' | 'error'; duration_ms: number; created_at: string
-  request: { method: string; path: string }; response: { status_code: number; body: unknown } | null
+  request: { method: string; path: string; source_case?: { exports?: Record<string, unknown> } }; response: { status_code: number; body: unknown } | null
   assertions: { type: string; pointer?: string; expected: unknown; actual: unknown; passed: boolean; error?: string }[]
   error: string | null
 }
@@ -17,6 +17,7 @@ export function ExecutionResult({ value }: { value: Execution }) {
     <p role="status" className={'font-semibold ' + (value.status === 'passed' ? 'text-emerald-700' : value.status === 'failed' ? 'text-rose-700' : 'text-amber-800')}>{statusNames[value.status]} · {value.duration_ms} ms{value.response ? ' · HTTP ' + value.response.status_code : ''}</p>
     <p className="mt-2 break-all text-xs text-slate-400">记录 ID：{value.id} · {new Date(value.created_at).toLocaleString('zh-CN')}</p>
     {value.error && <p role="alert" className="mt-3 text-sm text-amber-800">{value.error}</p>}
+    {value.request.source_case?.exports && Object.keys(value.request.source_case.exports).length > 0 && <details open className="mt-3"><summary className="cursor-pointer text-sm">导出变量</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(value.request.source_case.exports, null, 2)}</pre></details>}
     <ul className="mt-3 space-y-2">{value.assertions.map((check, index) => <li key={index} className="rounded-lg bg-slate-50 p-3 text-xs"><p className={check.passed ? 'text-emerald-700' : 'text-rose-700'}>{check.passed ? '✓' : '×'} {check.type === 'status' ? '状态码' : 'JSON ' + (check.pointer || '(根节点)')}</p><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all">期望：{JSON.stringify(check.expected)}{'\n'}实际：{JSON.stringify(check.actual)}{check.error ? '\n' + check.error : ''}</pre></li>)}</ul>
     {value.response && <details open className="mt-3"><summary className="cursor-pointer text-sm">响应内容</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-50 p-3 text-xs">{JSON.stringify(value.response.body, null, 2)}</pre></details>}
   </div>
@@ -42,6 +43,7 @@ export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, o
   const [result, setResult] = useState<Execution | null>(null)
   const [caseName, setCaseName] = useState(operation.method + ' ' + operation.path)
   const [notice, setNotice] = useState('')
+  const [extract, setExtract] = useState('{}')
   useEffect(() => () => onBusyChange(false), [onBusyChange])
 
   function readPayload() {
@@ -53,8 +55,9 @@ export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, o
     setError(''); setNotice('')
     try {
       const payload = readPayload()
+      const definitions: unknown = JSON.parse(extract)
       setBusy(true); onBusyChange(true)
-      await request('/api/projects/' + projectId + '/test-cases', { method: 'POST', body: JSON.stringify({ name: caseName.trim(), operation_id: operation.id, input: payload }) })
+      await request('/api/projects/' + projectId + '/test-cases', { method: 'POST', body: JSON.stringify({ name: caseName.trim(), operation_id: operation.id, input: { ...payload, extract: definitions } }) })
       setNotice('已保存为测试用例，可在下方测试资产中重复执行。'); onCaseSaved()
     } catch (caught) { setError(caught instanceof SyntaxError ? '请检查参数、请求体和断言的 JSON 格式。' : errorMessage(caught)) }
     finally { setBusy(false); onBusyChange(false) }
@@ -77,13 +80,14 @@ export function ExecutionPanel({ projectId, operation, disabled, onBusyChange, o
     <h6 className="font-semibold">执行与断言</h6><p className="mt-2 text-xs text-slate-500">将向项目基础地址发送真实请求。请使用测试服务；请求不会自动重试。当前支持无认证接口与 JSON 请求体。</p>
     <form onSubmit={event => void execute(event)} className="mt-4">
       <fieldset disabled={busy || disabled} className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">路径参数 JSON<textarea className={input} rows={3} value={pathParams} onChange={event => setPathParams(event.target.value)} maxLength={10000} /></label>
+        <label className="text-sm">路径参数 JSON<textarea className={input} rows={3} value={pathParams} onChange={event => setPathParams(event.target.value)} maxLength={10000} /><span className="mt-1 block text-xs text-slate-400">流程用例可使用完整字段值 {'{{order_id}}'}，需保存并在用例集中执行。</span></label>
         <label className="text-sm">查询参数 JSON<textarea className={input} rows={3} value={queryParams} onChange={event => setQueryParams(event.target.value)} maxLength={10000} /></label>
         {!['GET', 'HEAD', 'OPTIONS'].includes(operation.method) && <label className="text-sm sm:col-span-2">JSON 请求体<textarea className={input} rows={4} maxLength={60000} value={body} onChange={event => setBody(event.target.value)} placeholder={'{"product_id":"demo","quantity":1}'} /></label>}
         <label className="text-sm">期望状态码<input className={input} required type="number" min={100} max={599} value={expectedStatus} onChange={event => setExpectedStatus(Number(event.target.value))} /></label>
         <label className="text-sm">JSON 相等断言<textarea className={input} rows={4} value={checks} maxLength={20000} onChange={event => setChecks(event.target.value)} placeholder={'[{"pointer":"/status","expected":"created"}]'} /><span className="mt-1 block text-xs text-slate-400">使用 JSON Pointer，例如 /status 或 /items/0/id；[] 表示只检查状态码。</span></label>
         <button className={button + ' justify-self-start sm:col-span-2'} type="submit" disabled={busy || disabled}>{busy ? '执行中…' : '发送请求并执行断言'}</button>
         <label className="text-sm">用例名称<input className={input} maxLength={100} value={caseName} onChange={event => setCaseName(event.target.value)} /></label>
+        <label className="text-sm">响应变量提取 JSON<textarea className={input} rows={3} value={extract} maxLength={4000} onChange={event => setExtract(event.target.value)} placeholder={'{"order_id":"/id"}'} /><span className="mt-1 block text-xs text-slate-400">仅保存用例时生效；断言通过后按 JSON Pointer 提取标量，供后续用例引用。</span></label>
         <button className={button + ' self-end justify-self-start'} type="button" disabled={busy || disabled || !caseName.trim()} onClick={() => void saveCase()}>保存为测试用例</button>
       </fieldset>
     </form>
